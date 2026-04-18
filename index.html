@@ -244,20 +244,10 @@
   <button id="vr-button" type="button" disabled>正在检测 VR 支持...</button>
 
   <script src="./server-info.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
-  <script type="importmap">
-    {
-      "imports": {
-        "three": "https://unpkg.com/three@0.160.1/build/three.module.js",
-        "three/addons/": "https://unpkg.com/three@0.160.1/examples/jsm/"
-      }
-    }
-  </script>
+  <script src="./vendor/qrcode/qrcode.min.js"></script>
 
   <script type="module">
-    import * as THREE from "three";
-    import { XRControllerModelFactory } from "three/addons/webxr/XRControllerModelFactory.js";
-    import { XRHandModelFactory } from "three/addons/webxr/XRHandModelFactory.js";
+    import * as THREE from "./vendor/three/build/three.module.js";
 
     let scene;
     let camera;
@@ -278,6 +268,45 @@
     const raycaster = new THREE.Raycaster();
     const tempMatrix = new THREE.Matrix4();
     const roverBasePosition = new THREE.Vector3(0, 0, -2.4);
+    const pinchDistanceThreshold = 0.018;
+    const pinchCaptureRadius = 0.18;
+    const pinchStates = new Map();
+    const pinchPoint = new THREE.Vector3();
+    const thumbPoint = new THREE.Vector3();
+    const indexPoint = new THREE.Vector3();
+    const jointMarkerGeometry = new THREE.SphereGeometry(0.0075, 10, 10);
+    const jointMarkerMaterial = new THREE.MeshBasicMaterial({
+      color: 0x89f0b2,
+      transparent: true,
+      opacity: 0.85
+    });
+    const handJointNames = [
+      "wrist",
+      "thumb-metacarpal",
+      "thumb-phalanx-proximal",
+      "thumb-phalanx-distal",
+      "thumb-tip",
+      "index-finger-metacarpal",
+      "index-finger-phalanx-proximal",
+      "index-finger-phalanx-intermediate",
+      "index-finger-phalanx-distal",
+      "index-finger-tip",
+      "middle-finger-metacarpal",
+      "middle-finger-phalanx-proximal",
+      "middle-finger-phalanx-intermediate",
+      "middle-finger-phalanx-distal",
+      "middle-finger-tip",
+      "ring-finger-metacarpal",
+      "ring-finger-phalanx-proximal",
+      "ring-finger-phalanx-intermediate",
+      "ring-finger-phalanx-distal",
+      "ring-finger-tip",
+      "pinky-finger-metacarpal",
+      "pinky-finger-phalanx-proximal",
+      "pinky-finger-phalanx-intermediate",
+      "pinky-finger-phalanx-distal",
+      "pinky-finger-tip"
+    ];
 
     const vrButton = document.getElementById("vr-button");
     const quickStatus = document.getElementById("quick-status");
@@ -609,9 +638,6 @@
     }
 
     function setupControllersAndHands() {
-      const controllerModelFactory = new XRControllerModelFactory();
-      const handModelFactory = new XRHandModelFactory();
-
       controller1 = renderer.xr.getController(0);
       controller2 = renderer.xr.getController(1);
       controllerGrip1 = renderer.xr.getControllerGrip(0);
@@ -621,16 +647,52 @@
 
       setupController(controller1, 0);
       setupController(controller2, 1);
+      setupHand(hand1, "left");
+      setupHand(hand2, "right");
 
-      controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
-      controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
       scene.add(controllerGrip1, controllerGrip2);
 
-      hand1.add(handModelFactory.createHandModel(hand1, "mesh"));
-      hand2.add(handModelFactory.createHandModel(hand2, "mesh"));
       hand1.visible = false;
       hand2.visible = false;
       scene.add(hand1, hand2);
+    }
+
+    function setupHand(hand, handedness) {
+      pinchStates.set(hand, { pinching: false, selected: null, selectedVisual: null });
+
+      hand.addEventListener("connected", (event) => {
+        if (!event.data?.hand) {
+          return;
+        }
+
+        hand.visible = true;
+        hand.userData.handedness = handedness;
+        ensureHandJointMarkers(hand);
+        setQuickStatus(`已检测到${handedness === "left" ? "左手" : "右手"}手势。可通过拇指和食指捏合抓取火星车。`);
+      });
+
+      hand.addEventListener("disconnected", () => {
+        releaseHandObject(hand);
+        hand.visible = false;
+      });
+    }
+
+    function ensureHandJointMarkers(hand) {
+      if (!hand.joints) {
+        return;
+      }
+
+      handJointNames.forEach((jointName) => {
+        const joint = hand.joints[jointName];
+        if (!joint || joint.userData.markerAttached) {
+          return;
+        }
+
+        const marker = new THREE.Mesh(jointMarkerGeometry, jointMarkerMaterial.clone());
+        marker.renderOrder = 2;
+        joint.add(marker);
+        joint.userData.markerAttached = true;
+      });
     }
 
     function setupController(controller, index) {
@@ -750,7 +812,7 @@
       vrButton.textContent = "退出 VR";
       capHand.textContent = "已进入会话，等待检测";
       capHand.className = "warn";
-      setQuickStatus("已进入 VR。控制器连上后可以抓取火星车，手势可用时会自动显示。");
+      setQuickStatus("已进入 VR。控制器可射线抓取，手势可通过拇指和食指捏合抓取。");
       updateInputState();
     }
 
@@ -760,6 +822,8 @@
       hand2.visible = false;
       releaseObject(controller1);
       releaseObject(controller2);
+      releaseHandObject(hand1);
+      releaseHandObject(hand2);
       setCapability(capHand, "进入会话后检测", "warn");
       setCapability(capController, "进入会话后检测", "warn");
       setQuickStatus("已退出 VR。");
@@ -804,12 +868,90 @@
       setQuickStatus("已释放抓取目标。");
     }
 
+    function releaseHandObject(hand) {
+      const state = pinchStates.get(hand);
+      if (!state?.selected) {
+        if (state) {
+          state.pinching = false;
+        }
+        return;
+      }
+
+      state.selectedVisual?.material.emissive?.setHex(0x000000);
+      scene.attach(state.selected);
+      state.selected = null;
+      state.selectedVisual = null;
+      state.pinching = false;
+      setQuickStatus("已通过手势释放抓取目标。");
+    }
+
     function intersectInteractables(controller) {
       tempMatrix.identity().extractRotation(controller.matrixWorld);
       raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
       raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
       const hits = raycaster.intersectObjects(interactables, false);
       return hits[0] ?? null;
+    }
+
+    function findClosestInteractable(point) {
+      let best = null;
+
+      interactables.forEach((object) => {
+        const target = object.userData.grabbableRoot ?? object;
+        const worldPosition = new THREE.Vector3();
+        target.getWorldPosition(worldPosition);
+        const distance = point.distanceTo(worldPosition);
+
+        if (distance > pinchCaptureRadius) {
+          return;
+        }
+
+        if (!best || distance < best.distance) {
+          best = { object, target, distance };
+        }
+      });
+
+      return best;
+    }
+
+    function updateHandPinch(hand) {
+      const state = pinchStates.get(hand);
+      if (!state || !hand.visible || !hand.joints) {
+        releaseHandObject(hand);
+        return false;
+      }
+
+      const thumbTip = hand.joints["thumb-tip"];
+      const indexTip = hand.joints["index-finger-tip"];
+
+      if (!thumbTip || !indexTip || !thumbTip.visible || !indexTip.visible) {
+        releaseHandObject(hand);
+        return false;
+      }
+
+      thumbTip.getWorldPosition(thumbPoint);
+      indexTip.getWorldPosition(indexPoint);
+      pinchPoint.copy(thumbPoint).add(indexPoint).multiplyScalar(0.5);
+
+      const isPinching = thumbPoint.distanceTo(indexPoint) < pinchDistanceThreshold;
+
+      if (isPinching && !state.pinching) {
+        const hit = findClosestInteractable(pinchPoint);
+        if (hit) {
+          hit.object.material.emissive?.setHex(0x552200);
+          hand.attach(hit.target);
+          state.selected = hit.target;
+          state.selectedVisual = hit.object;
+          setQuickStatus(`已用${hand.userData.handedness === "left" ? "左手" : "右手"}捏合抓取火星车。`);
+        }
+      }
+
+      if (!isPinching && state.pinching) {
+        releaseHandObject(hand);
+      }
+
+      state.pinching = isPinching;
+      return true;
     }
 
     function updateControllerVisual(controller) {
@@ -873,6 +1015,7 @@
           "诊断结论: VR 会话已建立。",
           `控制器: ${controllerDetected ? "已检测到" : "未检测到"}`,
           `手势追踪: ${handDetected ? "已检测到" : "未检测到"}`,
+          "手势交互说明: 用拇指和食指捏合可抓取火星车。",
           "如果控制器和手势都未检测到，检查头显当前输入设置，或者企业版策略是否限制输入设备。"
         ]);
       }
@@ -902,6 +1045,8 @@
       updateControllerVisual(controller1);
       updateControllerVisual(controller2);
       updateInputState();
+      updateHandPinch(hand1);
+      updateHandPinch(hand2);
 
       renderer.render(scene, camera);
     }
