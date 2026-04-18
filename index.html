@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PICO 4 企业版 WebXR 连接页</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg-1: #1b0905;
+      --bg-2: #4a1c10;
+      --panel: rgba(19, 10, 8, 0.78);
+      --border: rgba(255, 197, 154, 0.18);
+      --text: #fff0df;
+      --muted: rgba(255, 240, 223, 0.76);
+      --accent: #ff7a45;
+      --accent-2: #ffb15e;
+      --good: #89f0b2;
+      --bad: #ff9f88;
+      --warn: #ffd27c;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background:
+        radial-gradient(circle at top, rgba(255, 143, 96, 0.16), transparent 30%),
+        linear-gradient(180deg, var(--bg-1), var(--bg-2));
+      color: var(--text);
+    }
+
+    #panel {
+      position: fixed;
+      top: 16px;
+      left: 16px;
+      z-index: 10;
+      width: min(420px, calc(100vw - 32px));
+      padding: 18px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.24);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.7rem;
+      line-height: 1.15;
+    }
+
+    p {
+      margin: 6px 0;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    #quick-status {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.05);
+      color: #ffe0cc;
+      font-size: 0.95rem;
+      line-height: 1.45;
+    }
+
+    #connect-box {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: 92px 1fr;
+      gap: 12px;
+      padding: 12px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    #qr-code {
+      width: 92px;
+      height: 92px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fff;
+      display: grid;
+      place-items: center;
+    }
+
+    #connect-meta {
+      min-width: 0;
+    }
+
+    #connect-meta p {
+      margin: 0 0 6px;
+      font-size: 0.9rem;
+    }
+
+    #connect-url {
+      word-break: break-all;
+      font-size: 0.88rem;
+      color: #ffd5bc;
+    }
+
+    .capabilities {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .capability {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 0.92rem;
+    }
+
+    .capability span:last-child {
+      color: var(--muted);
+    }
+
+    .ok {
+      color: var(--good) !important;
+    }
+
+    .bad {
+      color: var(--bad) !important;
+    }
+
+    .warn {
+      color: var(--warn) !important;
+    }
+
+    #tips {
+      margin-top: 14px;
+      padding-left: 18px;
+      color: var(--muted);
+    }
+
+    #tips li {
+      margin: 6px 0;
+      line-height: 1.45;
+    }
+
+    #diagnostics {
+      margin-top: 14px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      color: var(--muted);
+      font-size: 0.92rem;
+      line-height: 1.5;
+      white-space: pre-line;
+    }
+
+    #vr-button {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      z-index: 10;
+      min-width: 240px;
+      padding: 16px 26px;
+      border: 0;
+      border-radius: 999px;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
+      color: #fffaf6;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      box-shadow: 0 16px 40px rgba(255, 122, 69, 0.3);
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+
+    #vr-button:hover {
+      transform: translateX(-50%) translateY(-1px);
+    }
+
+    #vr-button:disabled {
+      opacity: 0.72;
+      cursor: not-allowed;
+      box-shadow: none;
+      background: #7a584f;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    @media (max-width: 768px) {
+      #panel {
+        top: 12px;
+        left: 12px;
+        width: calc(100vw - 24px);
+        padding: 16px;
+      }
+
+      h1 {
+        font-size: 1.35rem;
+      }
+
+      #vr-button {
+        width: calc(100vw - 28px);
+        min-width: 0;
+        bottom: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section id="panel">
+    <h1>PICO 4 企业版 WebXR 连接页</h1>
+    <p id="intro-text">请在 PICO 浏览器中打开这个网址。页面会直接检测当前浏览器能不能进入 VR，以及控制器和手势能力。</p>
+    <div id="quick-status">正在检测当前设备能力...</div>
+    <div id="connect-box">
+      <div id="qr-code">QR</div>
+      <div id="connect-meta">
+        <p>用 PICO 浏览器打开这个地址</p>
+        <div id="connect-url">正在生成局域网地址...</div>
+      </div>
+    </div>
+    <div class="capabilities">
+      <div class="capability"><span>浏览器 WebXR 接口</span><span id="cap-webxr">检测中</span></div>
+      <div class="capability"><span>沉浸式 VR</span><span id="cap-vr">检测中</span></div>
+      <div class="capability"><span>安全上下文</span><span id="cap-secure">检测中</span></div>
+      <div class="capability"><span>手势追踪</span><span id="cap-hand">进入会话后检测</span></div>
+      <div class="capability"><span>控制器</span><span id="cap-controller">进入会话后检测</span></div>
+    </div>
+    <div id="diagnostics">正在生成诊断结论...</div>
+    <ol id="tips"></ol>
+  </section>
+
+  <button id="vr-button" type="button" disabled>正在检测 VR 支持...</button>
+
+  <script src="./server-info.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.1/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { XRControllerModelFactory } from "three/addons/webxr/XRControllerModelFactory.js";
+    import { XRHandModelFactory } from "three/addons/webxr/XRHandModelFactory.js";
+
+    let scene;
+    let camera;
+    let renderer;
+    let clock;
+    let rover;
+    let marsDust;
+
+    let controller1;
+    let controller2;
+    let controllerGrip1;
+    let controllerGrip2;
+    let hand1;
+    let hand2;
+
+    const interactables = [];
+    const controllerData = new Map();
+    const raycaster = new THREE.Raycaster();
+    const tempMatrix = new THREE.Matrix4();
+    const roverBasePosition = new THREE.Vector3(0, 0, -2.4);
+
+    const vrButton = document.getElementById("vr-button");
+    const quickStatus = document.getElementById("quick-status");
+    const introText = document.getElementById("intro-text");
+    const connectUrlEl = document.getElementById("connect-url");
+    const qrCodeEl = document.getElementById("qr-code");
+    const capWebxr = document.getElementById("cap-webxr");
+    const capVr = document.getElementById("cap-vr");
+    const capSecure = document.getElementById("cap-secure");
+    const capHand = document.getElementById("cap-hand");
+    const capController = document.getElementById("cap-controller");
+    const diagnosticsEl = document.getElementById("diagnostics");
+    const tipsEl = document.getElementById("tips");
+    const serverInfo = window.__SERVER_INFO__ ?? null;
+
+    init();
+
+    function init() {
+      clock = new THREE.Clock();
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x140906);
+      scene.fog = new THREE.FogExp2(0x2a120d, 0.045);
+
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 160);
+      camera.position.set(0, 1.65, 4.8);
+
+      renderer = new THREE.WebGLRenderer({ antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
+
+      buildLights();
+      buildEnvironment();
+      buildRover();
+      setupControllersAndHands();
+      setupConnectionInfo();
+      setupXRButton();
+
+      window.addEventListener("resize", onWindowResize);
+      renderer.xr.addEventListener("sessionstart", onSessionStart);
+      renderer.xr.addEventListener("sessionend", onSessionEnd);
+      renderer.setAnimationLoop(render);
+    }
+
+    function setCapability(target, text, kind) {
+      target.textContent = text;
+      target.className = kind;
+    }
+
+    function setQuickStatus(message) {
+      quickStatus.textContent = message;
+    }
+
+    function setDiagnostics(lines) {
+      diagnosticsEl.textContent = lines.join("\n");
+    }
+
+    function setTips(items) {
+      tipsEl.innerHTML = "";
+      items.forEach((item) => {
+        const li = document.createElement("li");
+        li.innerHTML = item;
+        tipsEl.appendChild(li);
+      });
+    }
+
+    function getConnectUrl() {
+      if (serverInfo?.lan_url) {
+        return serverInfo.lan_url;
+      }
+      return window.location.href;
+    }
+
+    function setupConnectionInfo() {
+      const connectUrl = getConnectUrl();
+      const isDeployed = !serverInfo?.lan_url;
+
+      introText.textContent = isDeployed
+        ? "请在 PICO 浏览器中打开这个 HTTPS 地址。页面会直接检测当前浏览器能不能进入 VR，以及控制器和手势能力。"
+        : "请在 PICO 浏览器中打开这个网址。页面会直接检测当前浏览器能不能进入 VR，以及控制器和手势能力。";
+
+      setTips(
+        isDeployed
+          ? [
+              "直接在 PICO 浏览器打开下面这个 <code>HTTPS</code> 地址。",
+              "如果这里仍显示“不支持沉浸式 VR”，再去排查浏览器版本或企业策略。",
+              "如果页面能打开但不能进 VR，优先看下面的“安全上下文”和诊断结论。"
+            ]
+          : [
+              "电脑和 PICO 连接同一个 Wi-Fi。",
+              "电脑运行 <code>python main.py</code>。",
+              "在 PICO 浏览器输入电脑显示出来的局域网地址。",
+              "如果这里显示“不支持沉浸式 VR”，说明当前浏览器或企业策略没有放开 WebXR。"
+            ]
+      );
+
+      connectUrlEl.textContent = connectUrl;
+
+      if (window.QRCode) {
+        const canvas = document.createElement("canvas");
+        QRCode.toCanvas(
+          canvas,
+          connectUrl,
+          {
+            width: 92,
+            margin: 1,
+            color: {
+              dark: "#1b0905",
+              light: "#ffffff"
+            }
+          },
+          (error, canvas) => {
+            if (error) {
+              qrCodeEl.textContent = "二维码生成失败";
+              return;
+            }
+            qrCodeEl.innerHTML = "";
+            qrCodeEl.appendChild(canvas);
+          }
+        );
+      } else {
+        qrCodeEl.textContent = "二维码库未加载";
+      }
+    }
+
+    function buildLights() {
+      const hemisphere = new THREE.HemisphereLight(0xffd3aa, 0x2d130c, 1.8);
+      scene.add(hemisphere);
+
+      const sun = new THREE.DirectionalLight(0xfff1d6, 2.8);
+      sun.position.set(5, 8, 2);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(2048, 2048);
+      sun.shadow.camera.near = 0.5;
+      sun.shadow.camera.far = 30;
+      sun.shadow.camera.left = -10;
+      sun.shadow.camera.right = 10;
+      sun.shadow.camera.top = 10;
+      sun.shadow.camera.bottom = -10;
+      scene.add(sun);
+
+      const fill = new THREE.PointLight(0xff7b55, 16, 24, 2);
+      fill.position.set(-4, 2.6, -3);
+      scene.add(fill);
+    }
+
+    function buildEnvironment() {
+      const ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(80, 80, 120, 120),
+        new THREE.MeshStandardMaterial({
+          color: 0x8d4925,
+          roughness: 0.96,
+          metalness: 0.03
+        })
+      );
+
+      const positions = ground.geometry.attributes.position;
+      for (let i = 0; i < positions.count; i += 1) {
+        const x = positions.getX(i);
+        const y = positions.getY(i);
+        const noise = Math.sin(x * 0.22) * 0.15 + Math.cos(y * 0.18) * 0.12 + Math.random() * 0.05;
+        positions.setZ(i, noise);
+      }
+      ground.geometry.computeVertexNormals();
+      ground.rotation.x = -Math.PI / 2;
+      ground.receiveShadow = true;
+      scene.add(ground);
+
+      addRocks();
+      addStars();
+      addDust();
+    }
+
+    function addRocks() {
+      const rockGeometry = new THREE.DodecahedronGeometry(1, 0);
+      const rockMaterial = new THREE.MeshStandardMaterial({
+        color: 0x72341b,
+        roughness: 1,
+        metalness: 0.02
+      });
+
+      for (let i = 0; i < 48; i += 1) {
+        const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+        const scale = 0.12 + Math.random() * 0.45;
+        rock.scale.setScalar(scale);
+        rock.position.set(
+          (Math.random() - 0.5) * 26,
+          scale * 0.35,
+          (Math.random() - 0.5) * 26
+        );
+        rock.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        rock.castShadow = true;
+        rock.receiveShadow = true;
+        scene.add(rock);
+      }
+    }
+
+    function addStars() {
+      const count = 1400;
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count; i += 1) {
+        const index = i * 3;
+        positions[index] = (Math.random() - 0.5) * 120;
+        positions[index + 1] = 14 + Math.random() * 55;
+        positions[index + 2] = (Math.random() - 0.5) * 120;
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+      const stars = new THREE.Points(
+        geometry,
+        new THREE.PointsMaterial({
+          color: 0xfff7eb,
+          size: 0.18,
+          transparent: true,
+          opacity: 0.8
+        })
+      );
+      scene.add(stars);
+    }
+
+    function addDust() {
+      const count = 240;
+      const positions = new Float32Array(count * 3);
+      for (let i = 0; i < count; i += 1) {
+        const index = i * 3;
+        positions[index] = (Math.random() - 0.5) * 18;
+        positions[index + 1] = 0.1 + Math.random() * 2.2;
+        positions[index + 2] = (Math.random() - 0.5) * 18;
+      }
+
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+
+      marsDust = new THREE.Points(
+        geometry,
+        new THREE.PointsMaterial({
+          color: 0xffb28a,
+          size: 0.05,
+          transparent: true,
+          opacity: 0.4
+        })
+      );
+      scene.add(marsDust);
+    }
+
+    function buildRover() {
+      rover = new THREE.Group();
+      rover.position.copy(roverBasePosition);
+
+      const chassis = new THREE.Mesh(
+        new THREE.BoxGeometry(0.52, 0.18, 0.38),
+        new THREE.MeshStandardMaterial({
+          color: 0xf0b63c,
+          roughness: 0.45,
+          metalness: 0.55
+        })
+      );
+      chassis.position.y = 0.22;
+      chassis.castShadow = true;
+      rover.add(chassis);
+
+      const mast = new THREE.Mesh(
+        new THREE.BoxGeometry(0.03, 0.18, 0.03),
+        new THREE.MeshStandardMaterial({ color: 0xd6d2ca, roughness: 0.4, metalness: 0.65 })
+      );
+      mast.position.set(0.12, 0.38, 0);
+      mast.castShadow = true;
+      rover.add(mast);
+
+      const cameraHead = new THREE.Mesh(
+        new THREE.BoxGeometry(0.11, 0.07, 0.08),
+        new THREE.MeshStandardMaterial({ color: 0xebe7e1, roughness: 0.35, metalness: 0.5 })
+      );
+      cameraHead.position.set(0.12, 0.49, 0);
+      cameraHead.castShadow = true;
+      rover.add(cameraHead);
+
+      const panelMaterial = new THREE.MeshStandardMaterial({
+        color: 0x274989,
+        roughness: 0.26,
+        metalness: 0.72
+      });
+
+      const leftPanel = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.02, 0.22), panelMaterial);
+      leftPanel.position.set(-0.34, 0.28, 0);
+      leftPanel.castShadow = true;
+      rover.add(leftPanel);
+
+      const rightPanel = leftPanel.clone();
+      rightPanel.position.x = 0.34;
+      rover.add(rightPanel);
+
+      const wheelGeometry = new THREE.CylinderGeometry(0.075, 0.075, 0.055, 22);
+      const wheelMaterial = new THREE.MeshStandardMaterial({
+        color: 0x302b28,
+        roughness: 0.95,
+        metalness: 0.08
+      });
+      const wheelPositions = [
+        [-0.22, 0.09, 0.21], [0.22, 0.09, 0.21],
+        [-0.22, 0.09, 0], [0.22, 0.09, 0],
+        [-0.22, 0.09, -0.21], [0.22, 0.09, -0.21]
+      ];
+
+      wheelPositions.forEach(([x, y, z]) => {
+        const wheel = new THREE.Mesh(wheelGeometry, wheelMaterial);
+        wheel.rotation.x = Math.PI / 2;
+        wheel.position.set(x, y, z);
+        wheel.castShadow = true;
+        rover.add(wheel);
+      });
+
+      rover.traverse((child) => {
+        if (child.isMesh) {
+          child.receiveShadow = true;
+          child.material = child.material.clone();
+          child.userData.grabbableRoot = rover;
+          interactables.push(child);
+        }
+      });
+
+      scene.add(rover);
+    }
+
+    function setupControllersAndHands() {
+      const controllerModelFactory = new XRControllerModelFactory();
+      const handModelFactory = new XRHandModelFactory();
+
+      controller1 = renderer.xr.getController(0);
+      controller2 = renderer.xr.getController(1);
+      controllerGrip1 = renderer.xr.getControllerGrip(0);
+      controllerGrip2 = renderer.xr.getControllerGrip(1);
+      hand1 = renderer.xr.getHand(0);
+      hand2 = renderer.xr.getHand(1);
+
+      setupController(controller1, 0);
+      setupController(controller2, 1);
+
+      controllerGrip1.add(controllerModelFactory.createControllerModel(controllerGrip1));
+      controllerGrip2.add(controllerModelFactory.createControllerModel(controllerGrip2));
+      scene.add(controllerGrip1, controllerGrip2);
+
+      hand1.add(handModelFactory.createHandModel(hand1, "mesh"));
+      hand2.add(handModelFactory.createHandModel(hand2, "mesh"));
+      hand1.visible = false;
+      hand2.visible = false;
+      scene.add(hand1, hand2);
+    }
+
+    function setupController(controller, index) {
+      const lineGeometry = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(0, 0, 0),
+        new THREE.Vector3(0, 0, -4.5)
+      ]);
+      const lineMaterial = new THREE.LineBasicMaterial({ color: 0xffd3aa, transparent: true, opacity: 0.9 });
+      const line = new THREE.Line(lineGeometry, lineMaterial);
+      line.scale.z = 1;
+      controller.add(line);
+
+      controller.userData.index = index;
+      controller.userData.line = line;
+
+      controller.addEventListener("connected", (event) => {
+        const rayMode = event.data?.targetRayMode ?? "unknown";
+        setCapability(capController, `已连接 (${rayMode})`, "ok");
+        setQuickStatus(`控制器 ${index + 1} 已连接，可以抓取场景中的火星车。`);
+      });
+
+      controller.addEventListener("disconnected", () => {
+        releaseObject(controller);
+        setCapability(capController, "未连接", "warn");
+      });
+
+      controller.addEventListener("selectstart", () => onSelectStart(controller));
+      controller.addEventListener("selectend", () => onSelectEnd(controller));
+
+      controllerData.set(controller, { selected: null, hovered: null });
+      scene.add(controller);
+    }
+
+    async function setupXRButton() {
+      const secureContext = window.isSecureContext;
+      const inPicoBrowser = /PICO|PICOBrowser|PicoBrowser/i.test(navigator.userAgent);
+      setCapability(capSecure, secureContext ? "是" : "否", secureContext ? "ok" : "warn");
+
+      if (!("xr" in navigator)) {
+        setCapability(capWebxr, "不支持", "bad");
+        setCapability(capVr, "不支持", "bad");
+        vrButton.textContent = "当前浏览器不支持 WebXR";
+        setQuickStatus("当前设备浏览器没有提供 WebXR 接口。请在 PICO 浏览器或支持 WebXR 的浏览器中打开。");
+        setDiagnostics([
+          "诊断结论: 当前页面没有拿到 navigator.xr。",
+          `浏览器识别: ${inPicoBrowser ? "像是 PICO 浏览器" : "不是 PICO 浏览器，或 UA 未暴露 PICO 标识"}`,
+          `安全上下文: ${secureContext ? "是" : "否，局域网 HTTP 在部分浏览器上可能仍受限制"}`,
+          "建议: 在 PICO 头显自带浏览器中打开此页；如果是企业版设备，检查应用白名单和 WebXR 策略。"
+        ]);
+        return;
+      }
+
+      setCapability(capWebxr, "支持", "ok");
+
+      try {
+        const supported = await navigator.xr.isSessionSupported("immersive-vr");
+        if (!supported) {
+          setCapability(capVr, "不支持", "bad");
+          vrButton.textContent = "当前设备不能进入沉浸式 VR";
+          setQuickStatus("页面打开了，但当前浏览器没有放开 immersive-vr。常见原因是浏览器不支持，或者企业版策略限制了 WebXR。");
+          setDiagnostics([
+            "诊断结论: 浏览器有 WebXR，但不支持 immersive-vr。",
+            `浏览器识别: ${inPicoBrowser ? "PICO 浏览器" : "非 PICO 浏览器"}`,
+            `安全上下文: ${secureContext ? "是" : "否"}`,
+            "可能原因: 企业管理策略关闭了沉浸式 VR；当前浏览器版本不支持；头显浏览器不是 XR 浏览器。"
+          ]);
+          return;
+        }
+
+        setCapability(capVr, "支持", "ok");
+        vrButton.textContent = "进入 VR 体验";
+        vrButton.disabled = false;
+        vrButton.addEventListener("click", toggleXRSession);
+        setQuickStatus("当前浏览器支持进入 VR。请直接点击下方按钮进入。");
+        setDiagnostics([
+          "诊断结论: 当前浏览器支持 immersive-vr，可以进入 VR。",
+          `浏览器识别: ${inPicoBrowser ? "PICO 浏览器" : "非 PICO 浏览器，但具备 WebXR 能力"}`,
+          `安全上下文: ${secureContext ? "是" : "否，若后续 requestSession 失败，优先改成 HTTPS 或检查浏览器限制"}`,
+          "进入会话后，本页会继续检测控制器和手势追踪。"
+        ]);
+      } catch (error) {
+        setCapability(capVr, "检测失败", "bad");
+        vrButton.textContent = "VR 检测失败";
+        setQuickStatus(`检测 VR 能力失败: ${error.message}`);
+        setDiagnostics([
+          "诊断结论: 调用 isSessionSupported 失败。",
+          `错误信息: ${error.message}`,
+          "可能原因: 浏览器策略拦截、设备 XR 服务异常、企业版权限限制。"
+        ]);
+      }
+    }
+
+    async function toggleXRSession() {
+      const currentSession = renderer.xr.getSession();
+      if (currentSession) {
+        await currentSession.end();
+        return;
+      }
+
+      try {
+        const session = await navigator.xr.requestSession("immersive-vr", {
+          requiredFeatures: ["local-floor"],
+          optionalFeatures: ["bounded-floor", "hand-tracking"]
+        });
+        await renderer.xr.setSession(session);
+      } catch (error) {
+        setQuickStatus(`进入 VR 失败: ${error.message}`);
+        setDiagnostics([
+          "诊断结论: 浏览器宣称支持 immersive-vr，但 requestSession 失败。",
+          `错误信息: ${error.message}`,
+          "优先排查: 浏览器是否要求 HTTPS；企业版是否禁用了沉浸模式；是否有系统弹窗未确认。"
+        ]);
+      }
+    }
+
+    function onSessionStart() {
+      vrButton.textContent = "退出 VR";
+      capHand.textContent = "已进入会话，等待检测";
+      capHand.className = "warn";
+      setQuickStatus("已进入 VR。控制器连上后可以抓取火星车，手势可用时会自动显示。");
+      updateInputState();
+    }
+
+    function onSessionEnd() {
+      vrButton.textContent = "进入 VR 体验";
+      hand1.visible = false;
+      hand2.visible = false;
+      releaseObject(controller1);
+      releaseObject(controller2);
+      setCapability(capHand, "进入会话后检测", "warn");
+      setCapability(capController, "进入会话后检测", "warn");
+      setQuickStatus("已退出 VR。");
+      setDiagnostics([
+        "诊断结论: 已退出 VR 会话。",
+        "如果刚才在会话里没有检测到控制器或手势，优先检查头显当前输入模式，以及企业版是否禁用了手势追踪。"
+      ]);
+    }
+
+    function onSelectStart(controller) {
+      const data = controllerData.get(controller);
+      const hit = intersectInteractables(controller);
+      if (!hit) {
+        setQuickStatus("控制器已触发，但没有选中可抓取目标。");
+        return;
+      }
+
+      const target = hit.object.userData.grabbableRoot ?? hit.object;
+      hit.object.material.emissive?.setHex(0x552200);
+      controller.attach(target);
+      data.selected = target;
+      data.selectedVisual = hit.object;
+      setQuickStatus("已抓取火星车。松开按键可释放。");
+    }
+
+    function onSelectEnd(controller) {
+      releaseObject(controller);
+    }
+
+    function releaseObject(controller) {
+      const data = controllerData.get(controller);
+      if (!data?.selected) {
+        return;
+      }
+
+      const object = data.selected;
+      const visual = data.selectedVisual;
+      visual?.material.emissive?.setHex(0x000000);
+      scene.attach(object);
+      data.selectedVisual = null;
+      data.selected = null;
+      setQuickStatus("已释放抓取目标。");
+    }
+
+    function intersectInteractables(controller) {
+      tempMatrix.identity().extractRotation(controller.matrixWorld);
+      raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld);
+      raycaster.ray.direction.set(0, 0, -1).applyMatrix4(tempMatrix);
+      const hits = raycaster.intersectObjects(interactables, false);
+      return hits[0] ?? null;
+    }
+
+    function updateControllerVisual(controller) {
+      const data = controllerData.get(controller);
+      const line = controller.userData.line;
+      const hit = intersectInteractables(controller);
+
+      if (data.selected) {
+        line.scale.z = 0.12;
+        line.material.color.setHex(0x8affb5);
+        return;
+      }
+
+      if (data.hovered && data.hovered !== hit?.object) {
+        data.hovered.material.emissive?.setHex(0x000000);
+      }
+
+      data.hovered = hit?.object ?? null;
+
+      if (hit) {
+        line.scale.z = hit.distance / 4.5;
+        line.material.color.setHex(0xff9e6d);
+        hit.object.material.emissive?.setHex(0x331100);
+      } else {
+        line.scale.z = 1;
+        line.material.color.setHex(0xffd3aa);
+      }
+    }
+
+    function updateInputState() {
+      const session = renderer.xr.getSession();
+      if (!session) {
+        return;
+      }
+
+      let handDetected = false;
+      let controllerDetected = false;
+
+      hand1.visible = false;
+      hand2.visible = false;
+
+      for (const source of session.inputSources) {
+        if (source.hand) {
+          handDetected = true;
+          if (source.handedness === "left") {
+            hand1.visible = true;
+          }
+          if (source.handedness === "right") {
+            hand2.visible = true;
+          }
+        } else if (source.targetRayMode) {
+          controllerDetected = true;
+        }
+      }
+
+      setCapability(capHand, handDetected ? "已检测到" : "未检测到", handDetected ? "ok" : "warn");
+      setCapability(capController, controllerDetected ? "已检测到" : "未检测到", controllerDetected ? "ok" : "warn");
+
+      if (renderer.xr.getSession()) {
+        setDiagnostics([
+          "诊断结论: VR 会话已建立。",
+          `控制器: ${controllerDetected ? "已检测到" : "未检测到"}`,
+          `手势追踪: ${handDetected ? "已检测到" : "未检测到"}`,
+          "如果控制器和手势都未检测到，检查头显当前输入设置，或者企业版策略是否限制输入设备。"
+        ]);
+      }
+    }
+
+    function animateScene(elapsed, delta) {
+      rover.position.y = Math.sin(elapsed * 1.4) * 0.02;
+      rover.position.z = roverBasePosition.z + Math.sin(elapsed * 0.85) * 0.08;
+      rover.rotation.y = Math.sin(elapsed * 0.55) * 0.08;
+
+      if (marsDust) {
+        marsDust.rotation.y += delta * 0.05;
+        const positions = marsDust.geometry.attributes.position;
+        for (let i = 0; i < positions.count; i += 1) {
+          const y = positions.getY(i) + delta * 0.12;
+          positions.setY(i, y > 2.6 ? 0.1 : y);
+        }
+        positions.needsUpdate = true;
+      }
+    }
+
+    function render() {
+      const delta = clock.getDelta();
+      const elapsed = clock.elapsedTime;
+
+      animateScene(elapsed, delta);
+      updateControllerVisual(controller1);
+      updateControllerVisual(controller2);
+      updateInputState();
+
+      renderer.render(scene, camera);
+    }
+
+    function onWindowResize() {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+  </script>
+</body>
+</html>
