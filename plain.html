@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PICO 纯 HTML 测试页</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(180deg, #180a07, #492114);
+      color: #fff2e4;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    }
+
+    main {
+      width: min(680px, calc(100vw - 32px));
+      padding: 28px;
+      border-radius: 20px;
+      background: rgba(22, 12, 10, 0.88);
+      border: 1px solid rgba(255, 194, 154, 0.16);
+      box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+    }
+
+    h1 {
+      margin: 0 0 12px;
+      font-size: 2rem;
+    }
+
+    p {
+      margin: 0 0 10px;
+      line-height: 1.6;
+      color: rgba(255, 242, 228, 0.82);
+      font-size: 1.05rem;
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>如果你能看到这行，说明纯 HTML 页面是正常的</h1>
+    <p>当前页面没有 JavaScript，没有 WebGL，没有 WebXR，没有外部依赖。</p>
+    <p>测试地址：<code>/plain.html</code></p>
+    <p>如果这个页面都黑屏或离线，问题就不在场景代码，而在站点访问、浏览器兼容或企业策略。</p>
+  </main>
+</body>
+</html>
