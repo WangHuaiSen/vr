@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PICO WebXR 极简诊断页</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #110907;
+      --panel: rgba(26, 16, 13, 0.9);
+      --border: rgba(255, 186, 143, 0.16);
+      --text: #fff2e3;
+      --muted: rgba(255, 242, 227, 0.72);
+      --ok: #8ef0b6;
+      --bad: #ff9a85;
+      --warn: #ffd27c;
+      --accent: #ff7d4c;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      overflow: hidden;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: radial-gradient(circle at top, rgba(255, 120, 80, 0.15), transparent 28%), var(--bg);
+      color: var(--text);
+    }
+
+    #panel {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      width: min(440px, calc(100vw - 24px));
+      padding: 16px;
+      border-radius: 18px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      backdrop-filter: blur(16px);
+    }
+
+    h1 {
+      margin: 0 0 10px;
+      font-size: 1.35rem;
+    }
+
+    p {
+      margin: 0 0 10px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.04);
+      margin-bottom: 8px;
+      font-size: 0.92rem;
+    }
+
+    .ok {
+      color: var(--ok);
+    }
+
+    .bad {
+      color: var(--bad);
+    }
+
+    .warn {
+      color: var(--warn);
+    }
+
+    #message, #errors {
+      margin-top: 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.04);
+      font-size: 0.92rem;
+      line-height: 1.5;
+      white-space: pre-line;
+    }
+
+    #vr-button {
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%);
+      z-index: 10;
+      min-width: 220px;
+      border: 0;
+      border-radius: 999px;
+      padding: 15px 24px;
+      font-size: 1rem;
+      font-weight: 700;
+      color: #fff9f5;
+      background: linear-gradient(135deg, var(--accent), #ffb15f);
+      cursor: pointer;
+    }
+
+    #vr-button:disabled {
+      cursor: not-allowed;
+      opacity: 0.72;
+      background: #7c5c51;
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <section id="panel">
+    <h1>PICO WebXR 极简诊断页</h1>
+    <p>这个页面只做四件事：显示静态 UI、初始化 WebGL、旋转一个立方体、尝试进入 immersive-vr。</p>
+    <div class="row"><span>静态页面</span><span id="cap-ui" class="ok">已显示</span></div>
+    <div class="row"><span>模块脚本</span><span id="cap-module" class="warn">检测中</span></div>
+    <div class="row"><span>WebGL</span><span id="cap-webgl" class="warn">检测中</span></div>
+    <div class="row"><span>安全上下文</span><span id="cap-secure" class="warn">检测中</span></div>
+    <div class="row"><span>WebXR 接口</span><span id="cap-webxr" class="warn">检测中</span></div>
+    <div class="row"><span>immersive-vr</span><span id="cap-vr" class="warn">检测中</span></div>
+    <div id="message">初始化中...</div>
+    <div id="errors">错误日志：暂无</div>
+  </section>
+
+  <button id="vr-button" type="button" disabled>检测 VR 支持中...</button>
+
+  <script>
+    const errorsEl = document.getElementById("errors");
+
+    function appendError(message) {
+      if (errorsEl.textContent === "错误日志：暂无") {
+        errorsEl.textContent = "";
+      }
+      errorsEl.textContent += `${message}\n`;
+    }
+
+    window.addEventListener("error", (event) => {
+      appendError(`window.onerror: ${event.message}`);
+    });
+
+    window.addEventListener("unhandledrejection", (event) => {
+      appendError(`unhandledrejection: ${event.reason?.message ?? event.reason}`);
+    });
+  </script>
+
+  <script type="module">
+    import * as THREE from "./vendor/three/build/three.module.js";
+
+    const capModule = document.getElementById("cap-module");
+    const capWebgl = document.getElementById("cap-webgl");
+    const capSecure = document.getElementById("cap-secure");
+    const capWebxr = document.getElementById("cap-webxr");
+    const capVr = document.getElementById("cap-vr");
+    const messageEl = document.getElementById("message");
+    const vrButton = document.getElementById("vr-button");
+
+    let renderer;
+    let scene;
+    let camera;
+    let cube;
+
+    function setCap(el, text, cls) {
+      el.textContent = text;
+      el.className = cls;
+    }
+
+    function setMessage(text) {
+      messageEl.textContent = text;
+    }
+
+    capModule.textContent = "已加载";
+    capModule.className = "ok";
+
+    setCap(capSecure, window.isSecureContext ? "是" : "否", window.isSecureContext ? "ok" : "bad");
+
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias: false, alpha: false });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      document.body.appendChild(renderer.domElement);
+      setCap(capWebgl, "已初始化", "ok");
+    } catch (error) {
+      setCap(capWebgl, "初始化失败", "bad");
+      setMessage(`WebGL 初始化失败: ${error.message}`);
+      throw error;
+    }
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x140906);
+
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(0, 1.6, 2.8);
+
+    const light = new THREE.HemisphereLight(0xffffff, 0x442211, 2.2);
+    scene.add(light);
+
+    cube = new THREE.Mesh(
+      new THREE.BoxGeometry(0.45, 0.45, 0.45),
+      new THREE.MeshStandardMaterial({ color: 0xff8a54, roughness: 0.35, metalness: 0.15 })
+    );
+    cube.position.set(0, 1.5, -1.4);
+    scene.add(cube);
+
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(6, 6),
+      new THREE.MeshStandardMaterial({ color: 0x6e331b, roughness: 1.0 })
+    );
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.y = 0.9;
+    scene.add(floor);
+
+    renderer.setAnimationLoop(() => {
+      cube.rotation.x += 0.01;
+      cube.rotation.y += 0.015;
+      renderer.render(scene, camera);
+    });
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    if (!("xr" in navigator)) {
+      setCap(capWebxr, "不支持", "bad");
+      setCap(capVr, "不支持", "bad");
+      setMessage("当前浏览器没有 navigator.xr。先确认是否是 Pico 浏览器，或是否被企业策略限制。");
+    } else {
+      setCap(capWebxr, "支持", "ok");
+
+      try {
+        const supported = await navigator.xr.isSessionSupported("immersive-vr");
+        if (!supported) {
+          setCap(capVr, "不支持", "bad");
+          setMessage("浏览器有 WebXR，但不支持 immersive-vr。");
+          vrButton.textContent = "当前设备不支持 immersive-vr";
+        } else {
+          setCap(capVr, "支持", "ok");
+          setMessage("页面已完成最小渲染。可以尝试点击进入 VR。");
+          vrButton.disabled = false;
+          vrButton.textContent = "进入 VR 测试";
+          vrButton.addEventListener("click", async () => {
+            try {
+              const session = await navigator.xr.requestSession("immersive-vr", {
+                requiredFeatures: ["local-floor"]
+              });
+              await renderer.xr.setSession(session);
+              setMessage("已进入 VR 会话。若你此时只看到黑屏，说明问题发生在 immersive 阶段。");
+              vrButton.textContent = "退出 VR 测试";
+              session.addEventListener("end", () => {
+                vrButton.textContent = "进入 VR 测试";
+                setMessage("已退出 VR 会话。");
+              });
+            } catch (error) {
+              appendError(`requestSession 失败: ${error.message}`);
+              setMessage(`进入 VR 失败: ${error.message}`);
+            }
+          });
+        }
+      } catch (error) {
+        setCap(capVr, "检测失败", "bad");
+        appendError(`isSessionSupported 失败: ${error.message}`);
+        setMessage(`检测 immersive-vr 失败: ${error.message}`);
+      }
+    }
+  </script>
+</body>
+</html>
